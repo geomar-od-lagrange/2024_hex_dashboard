@@ -3,12 +3,12 @@ import geopandas as gpd
 
 features = gpd.GeoDataFrame(
     data={
-        "name": ["A", "B", "C", "D"],
+        "name": ["0", "1", "2", "3"],
         "connectivity": [
-            {"B": 2, "C": 0, "D": 0},
-            {"A": 2, "C": 1, "D": 3},
-            {"B": 0, "C": 4, "D": 1},
-            {"A": 0, "B": 0, "C": 1},
+            ["1"],
+            ["0", "2", "3"],
+            ["1", "3"],
+            ["2"],
         ],
     },
     geometry=[

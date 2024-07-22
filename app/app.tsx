@@ -3,11 +3,11 @@ import React, {useState, useMemo} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Map} from 'react-map-gl/maplibre';
 import DeckGL from '@deck.gl/react';
-import {GeoJsonLayer, ArcLayer} from '@deck.gl/layers';
-import {scaleQuantile} from 'd3-scale';
+import {GeoJsonLayer} from '@deck.gl/layers';
 
 import type {Color, PickingInfo, MapViewState} from '@deck.gl/core';
 import type {Feature, Polygon, MultiPolygon} from 'geojson';
+
 
 // Source data GeoJSON
 const DATA_URL =
@@ -26,32 +26,40 @@ const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/s
 
 type FeatureProperties = {
   name: string;
-  connectivity: Record<string, number>;
+  connectivity: Array<number>;
 };
 
 type Shape = Feature<Polygon | MultiPolygon, FeatureProperties>;
 
-type Connectivity = {
-  source: Shape;
-  target: Shape;
-  value: number;
-};
+function selectShapes(selectShape?: Shape | undefined) {
+  let selected: Shape[] = [selectShape]
 
-function selectShapes(data: Shape[] | undefined, selectShape?: Shape) {
-  if (!data || !data.length) {
-    return null;
+  if (selectShape) {
+    selectShape.properties.name = "S" + selectShape.properties.name
   }
-  if (!selectShape) {
-    selectShape = data.find(f => f.properties.name === 'A')!;
-  }
-  const {connectivity} = selectShape.properties;
 
-  const selected: Shape[] = Object.keys(connectivity).map(toId => {
-    const f = data[Number(toId)];
-    return data[Number(toId)]
-  });
+  if (!selected) {
+    return [];
+  }
 
   return selected;
+}
+
+function selectConnectedShapes(selectedShape?: Shape | undefined, data?: Shape[]) {
+  let connected_shapes: Shape[] = undefined
+
+  if (!selectedShape) {
+    return null
+  }
+
+  const connected_ids = selectedShape.properties.connectivity
+  connected_shapes = connected_ids.map(element => {
+    let d = data[Number(element)]
+    d.properties.name = "C" + d.properties.name
+    return d
+  })
+
+  return connected_shapes
 }
 
 function getTooltip({object}: PickingInfo<Shape>) {
@@ -68,7 +76,9 @@ export default function App({
 }) {
   const [selectedShape, selectShape] = useState<Shape>();
 
-  const selected = useMemo(() => selectShapes(data, selectedShape), [data, selectedShape]);
+  const selected = useMemo(() => selectShapes(selectedShape), undefined);
+
+  const connected_shapes = useMemo(() => selectConnectedShapes(selectedShape, data), [selectedShape, data]);
 
   const layers = [
     new GeoJsonLayer<FeatureProperties>({
@@ -86,18 +96,18 @@ export default function App({
       stroked: true,
       filled: true,
       getFillColor: [15, 95, 15, 175],
-      // onClick: ({object}) => selectShape(object),
-      pickable: false
+      pickable: true,
+      extruded: true,
+      getElevation: 100000.0
+    }),
+    new GeoJsonLayer<FeatureProperties>({
+      id: 'connected',
+      data: connected_shapes,
+      stroked: true,
+      filled: true,
+      getFillColor: [95, 0, 0, 175],
+      pickable: true
     })
-    // new ArcLayer<Connectivity>({
-    //   id: 'arc',
-    //   data: arcs,
-    //   getSourcePosition: d => d.source.properties.centroid,
-    //   getTargetPosition: d => d.target.properties.centroid,
-    //   getSourceColor: d => (d.value > 0 ? inFlowColors : outFlowColors)[d.quantile],
-    //   getTargetColor: d => (d.value > 0 ? outFlowColors : inFlowColors)[d.quantile],
-    //   getWidth: strokeWidth
-    // })
   ];
 
   return (
