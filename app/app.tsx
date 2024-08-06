@@ -10,8 +10,8 @@ import type {Feature, Polygon, MultiPolygon} from 'geojson';
 
 
 // Source data GeoJSON
-const DATA_URL =
-  './features.geojson'; // eslint-disable-line
+const DATA_URL ='./features.geojson'; // eslint-disable-line
+const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json';
 
 const INITIAL_VIEW_STATE: MapViewState = {
   longitude: 10,
@@ -22,9 +22,9 @@ const INITIAL_VIEW_STATE: MapViewState = {
   bearing: 30
 };
 
-const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json';
 
 type FeatureProperties = {
+  id: number;
   name: string;
   connectivity: Array<number>;
 };
@@ -62,8 +62,36 @@ function selectConnectedShapes(selectedShape?: Shape | undefined, data?: Shape[]
   return connected_shapes
 }
 
-function getTooltip({object}: PickingInfo<Shape>) {
-  return object && object.properties.name;
+function getTooltip({object, layer}: PickingInfo<Shape>) {
+  if (!object) return null;
+  // return object && typeof(layer.id)
+  if (String(layer.id) == 'base')
+    {
+      return object && 
+      `\
+      ID: ${object.properties.id}
+      Name: ${object.properties.name}
+      Depth: "base"
+      `;
+    }
+  else if (layer.id == "selected")
+    {
+      return object && 
+      `\
+      ID: ${object.properties.id}
+      Name: ${object.properties.name}
+      Depth: "selected"
+      `;
+    }
+  else if (layer.id == "connected")
+    {
+      return object && 
+      `\
+      ID: ${object.properties.id}
+      Name: ${object.properties.name}
+      Depth: "connected"
+      `;
+    }
 }
 
 /* eslint-disable react/no-deprecated */
@@ -75,14 +103,12 @@ export default function App({
   mapStyle?: string;
 }) {
   const [selectedShape, selectShape] = useState<Shape>();
-
   const selected = useMemo(() => selectShapes(selectedShape), undefined);
-
   const connected_shapes = useMemo(() => selectConnectedShapes(selectedShape, data), [selectedShape, data]);
 
   const layers = [
     new GeoJsonLayer<FeatureProperties>({
-      id: 'geojson',
+      id: 'base',
       data,
       stroked: true,
       filled: true,
