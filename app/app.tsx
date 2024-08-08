@@ -4,6 +4,7 @@ import {createRoot} from 'react-dom/client';
 import {Map} from 'react-map-gl/maplibre';
 import DeckGL from '@deck.gl/react';
 import {GeoJsonLayer} from '@deck.gl/layers';
+import {scaleThreshold} from 'd3-scale';
 
 import type {Color, PickingInfo, MapViewState} from '@deck.gl/core';
 import type {Feature, Polygon, MultiPolygon} from 'geojson';
@@ -11,7 +12,35 @@ import type {Feature, Polygon, MultiPolygon} from 'geojson';
 
 // Source data GeoJSON
 const DATA_URL ='./features.geojson'; // eslint-disable-line
-const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json';
+const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json'
+
+export const COLOR_SCALE_CONNECTED = scaleThreshold<number, Color>()
+  .domain([0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45])
+  .range([
+    [255,255,217,200],
+    [237,248,177,200],
+    [199,233,180,200],
+    [127,205,187,200],
+    [65,182,196,200],
+    [29,145,192,200],
+    [34,94,168,200],
+    [37,52,148,200],
+    [8,29,88,200]
+  ]);
+
+  export const COLOR_SCALE_SELECTED = scaleThreshold<number, Color>()
+  .domain([3, 6, 9, 12, 15, 18, 21, 24, 27])
+  .range([
+    [255,245,235,250],
+    [254,230,206,250],
+    [253,208,162,250],
+    [253,174,107,250],
+    [253,141,60,250],
+    [241,105,19,250],
+    [217,72,1,250],
+    [166,54,3,250],
+    [127,39,4,250],
+  ]);
 
 const INITIAL_VIEW_STATE: MapViewState = {
   longitude: 10,
@@ -22,55 +51,62 @@ const INITIAL_VIEW_STATE: MapViewState = {
   bearing: 30
 };
 
+interface Dictionary<T> {
+  [Key: string]: T;
+}
 
 type FeatureProperties = {
   id: number;
-  name: string;
-  connectivity: Array<number>;
+  lat: number;
+  lon: number;
+  depth: number;
+  rest: boolean;
+  substrate: string;
+  disease: boolean;
+  connectivity: Dictionary<number>;
+  // connectivity: Array<string>;
+  number_affected?: number;
+  dillution?: number;
 };
 
 type Shape = Feature<Polygon | MultiPolygon, FeatureProperties>;
 
-function selectShapes(selectShape?: Shape | undefined) {
-  let selected: Shape[] = [selectShape]
-
-  if (selectShape) {
-    selectShape.properties.name = "S" + selectShape.properties.name
+function setSelectedShape(nextSelectShape?: Shape | undefined) {
+  if (!nextSelectShape) {
+    return null;
   }
+  let selected: Shape[] = [nextSelectShape]
+  selected.map(element => {
+    // element.properties.number_affected = element.properties.connectivity["toID"].length
+    element.properties.number_affected = Object.keys(element.properties.connectivity).length
 
-  if (!selected) {
-    return [];
-  }
-
+  })
   return selected;
 }
 
-function selectConnectedShapes(selectedShape?: Shape | undefined, data?: Shape[]) {
+function setConnectedShape(selectedShape?: Shape, data?: Shape[]) {
   let connected_shapes: Shape[] = undefined
-
   if (!selectedShape) {
     return null
   }
-
-  const connected_ids = selectedShape.properties.connectivity
-  connected_shapes = connected_ids.map(element => {
-    let d = data[Number(element)]
-    d.properties.name = "C" + d.properties.name
-    return d
+  // let connected_ids = selectedShape.properties.connectivity["toID"]
+  let connected_ids = Object.keys(selectedShape.properties.connectivity).map(Number)
+  // let connected_weights = selectedShape.properties.connectivity["weight"]
+  // console.log("This element: ", selectedShape.properties.id, " connected with ", connected_ids)
+  connected_shapes = data.filter((element) => connected_ids.includes(element.properties.id))
+  connected_shapes.map(element => {
+    element.properties.dillution = selectedShape.properties.connectivity[element.properties.id]
   })
-
   return connected_shapes
 }
 
 function getTooltip({object, layer}: PickingInfo<Shape>) {
   if (!object) return null;
-  // return object && typeof(layer.id)
   if (String(layer.id) == 'base')
     {
       return object && 
       `\
       ID: ${object.properties.id}
-      Name: ${object.properties.name}
       Depth: "base"
       `;
     }
@@ -79,7 +115,7 @@ function getTooltip({object, layer}: PickingInfo<Shape>) {
       return object && 
       `\
       ID: ${object.properties.id}
-      Name: ${object.properties.name}
+      Number affected: ${object.properties.number_affected}
       Depth: "selected"
       `;
     }
@@ -88,11 +124,11 @@ function getTooltip({object, layer}: PickingInfo<Shape>) {
       return object && 
       `\
       ID: ${object.properties.id}
-      Name: ${object.properties.name}
-      Depth: "connected"
+      dillution: ${object.properties.dillution}
       `;
     }
 }
+
 
 /* eslint-disable react/no-deprecated */
 export default function App({
@@ -102,9 +138,9 @@ export default function App({
   data?: Shape[];
   mapStyle?: string;
 }) {
-  const [selectedShape, selectShape] = useState<Shape>();
-  const selected = useMemo(() => selectShapes(selectedShape), undefined);
-  const connected_shapes = useMemo(() => selectConnectedShapes(selectedShape, data), [selectedShape, data]);
+  const [nextSelectedShape, setNextSelectedShape] = useState<Shape>();
+  const selectedShape = useMemo(() => setSelectedShape(nextSelectedShape), [nextSelectedShape]);
+  const connectedShape = useMemo(() => setConnectedShape(nextSelectedShape, data), [nextSelectedShape, data]);
 
   const layers = [
     new GeoJsonLayer<FeatureProperties>({
@@ -112,27 +148,33 @@ export default function App({
       data,
       stroked: true,
       filled: true,
-      getFillColor: [75, 5, 75, 75],
-      onClick: ({object}) => selectShape(object),
+      getFillColor: [150, 150, 150, 150],
+      getLineColor: [200, 200, 200, 250],
+      // getLineColor: [50, 50, 50, 250],
+      getLineWidth: 10000,
+      onClick: ({object}) => setNextSelectedShape(object),
       pickable: true
     }),
     new GeoJsonLayer<FeatureProperties>({
       id: 'selected',
-      data: selected,
+      data: selectedShape,
       stroked: true,
       filled: true,
-      getFillColor: [15, 95, 15, 175],
+      getFillColor: d => COLOR_SCALE_SELECTED(d.properties.number_affected),
       pickable: true,
       extruded: true,
-      getElevation: 100000.0
+      getElevation: d => d.properties.number_affected * 100000 // adjust scaling
     }),
     new GeoJsonLayer<FeatureProperties>({
       id: 'connected',
-      data: connected_shapes,
+      data: connectedShape,
       stroked: true,
       filled: true,
-      getFillColor: [95, 0, 0, 175],
-      pickable: true
+      getFillColor: d => COLOR_SCALE_CONNECTED(d.properties.dillution),
+      onClick: ({object}) => setNextSelectedShape(object),
+      pickable: true,
+      extruded: true,
+      getElevation: d => d.properties.dillution * 1000000 // adjust scaling
     })
   ];
 
