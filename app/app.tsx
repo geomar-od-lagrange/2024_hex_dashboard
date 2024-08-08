@@ -11,7 +11,7 @@ import type {Feature, Polygon, MultiPolygon} from 'geojson';
 
 
 // Source data GeoJSON
-const DATA_URL ='./features.geojson'; // eslint-disable-line
+const DATA_URL ='./hex_features.geojson'; // eslint-disable-line
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json'
 
 export const COLOR_SCALE_CONNECTED = scaleThreshold<number, Color>()
@@ -66,7 +66,7 @@ type FeatureProperties = {
   connectivity: Dictionary<number>;
   // connectivity: Array<string>;
   number_affected?: number;
-  dillution?: number;
+  dilution?: number;
 };
 
 type Shape = Feature<Polygon | MultiPolygon, FeatureProperties>;
@@ -95,38 +95,40 @@ function setConnectedShape(selectedShape?: Shape, data?: Shape[]) {
   // console.log("This element: ", selectedShape.properties.id, " connected with ", connected_ids)
   connected_shapes = data.filter((element) => connected_ids.includes(element.properties.id))
   connected_shapes.map(element => {
-    element.properties.dillution = selectedShape.properties.connectivity[element.properties.id]
+    element.properties.dilution = selectedShape.properties.connectivity[element.properties.id]
   })
   return connected_shapes
 }
 
 function getTooltip({object, layer}: PickingInfo<Shape>) {
   if (!object) return null;
-  if (String(layer.id) == 'base')
-    {
-      return object && 
-      `\
-      ID: ${object.properties.id}
-      Depth: "base"
-      `;
-    }
-  else if (layer.id == "selected")
-    {
-      return object && 
-      `\
-      ID: ${object.properties.id}
-      Number affected: ${object.properties.number_affected}
-      Depth: "selected"
-      `;
-    }
-  else if (layer.id == "connected")
-    {
-      return object && 
-      `\
-      ID: ${object.properties.id}
-      dillution: ${object.properties.dillution}
-      `;
-    }
+
+  const TOOLTIP_BASE = `\
+    ID: ${object.properties.id}
+    Position: ${object.properties.lat} N, ${object.properties.lon} E
+    Depth: ${object.properties.depth} m
+    Restoration: ${Boolean(object.properties.rest)}
+    Substrate: ${object.properties.substrate}
+    Disease: ${Boolean(object.properties.disease)}
+  `;
+
+  const TOOLTIP_SELECTED = TOOLTIP_BASE + `\
+    Number affected: ${object.properties.number_affected}
+  `;
+
+  const TOOLTIP_CONNECTED = TOOLTIP_BASE + `\
+    Dilution: ${object.properties.dilution}
+  `;
+
+  if (layer.id == 'base') {
+    return object && TOOLTIP_BASE
+  }
+  else if (layer.id == "selected") {
+      return object && TOOLTIP_SELECTED
+  }
+  else if (layer.id == "connected") {
+      return object && TOOLTIP_CONNECTED
+  }
 }
 
 
@@ -170,11 +172,11 @@ export default function App({
       data: connectedShape,
       stroked: true,
       filled: true,
-      getFillColor: d => COLOR_SCALE_CONNECTED(d.properties.dillution),
+      getFillColor: d => COLOR_SCALE_CONNECTED(d.properties.dilution),
       onClick: ({object}) => setNextSelectedShape(object),
       pickable: true,
       extruded: true,
-      getElevation: d => d.properties.dillution * 1000000 // adjust scaling
+      getElevation: d => d.properties.dilution * 1000000 // adjust scaling
     })
   ];
 
