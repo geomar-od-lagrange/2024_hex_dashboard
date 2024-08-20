@@ -11,7 +11,8 @@ import type {Feature, Polygon, MultiPolygon} from 'geojson';
 
 
 // Source data GeoJSON
-const DATA_URL ='./hex_features.geojson'; // eslint-disable-line
+// const DATA_URL ='./hex_features.geojson'; // eslint-disable-line
+const DATA_URL ='./hex_features_real.geojson'; // eslint-disable-line
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json'
 
 export const COLOR_SCALE_CONNECTED = scaleThreshold<number, Color>()
@@ -55,13 +56,14 @@ interface Dictionary<T> {
   [Key: string]: T;
 }
 
+// ['id', 'lon', 'lat', 'depth', 'disease', 'rest', 'aqc', 'pop', 'connectivity', 'geometry'],
 type FeatureProperties = {
   id: number;
   lat: number;
   lon: number;
   depth: number;
   rest: boolean;
-  substrate: string;
+  aqc: number;
   disease: boolean;
   connectivity: Dictionary<number>;
   // connectivity: Array<string>;
@@ -108,7 +110,7 @@ function getTooltip({object, layer}: PickingInfo<Shape>) {
     Position: ${object.properties.lat} N, ${object.properties.lon} E
     Depth: ${object.properties.depth} m
     Restoration: ${Boolean(object.properties.rest)}
-    Substrate: ${object.properties.substrate}
+    Substrate: ${object.properties.aqc}
     Disease: ${Boolean(object.properties.disease)}
   `;
 
@@ -153,7 +155,7 @@ export default function App({
       getFillColor: [150, 150, 150, 150],
       getLineColor: [200, 200, 200, 250],
       // getLineColor: [50, 50, 50, 250],
-      getLineWidth: 10000,
+      getLineWidth: 1000,
       onClick: ({object}) => setNextSelectedShape(object),
       pickable: true
     }),
@@ -165,7 +167,7 @@ export default function App({
       getFillColor: d => COLOR_SCALE_SELECTED(d.properties.number_affected),
       pickable: true,
       extruded: true,
-      getElevation: d => d.properties.number_affected * 100000 // adjust scaling
+      getElevation: d => d.properties.number_affected * 1000 // adjust scaling
     }),
     new GeoJsonLayer<FeatureProperties>({
       id: 'connected',
