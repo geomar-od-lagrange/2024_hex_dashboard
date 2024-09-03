@@ -62,11 +62,11 @@ type FeatureProperties = {
   lat: number;
   lon: number;
   depth: number;
+  disease: boolean;
   rest: boolean;
   aqc: number;
-  disease: boolean;
+  pop: number;
   connectivity: Dictionary<number>;
-  // connectivity: Array<string>;
   number_affected?: number;
   dilution?: number;
 };
@@ -79,7 +79,6 @@ function setSelectedShape(nextSelectShape?: Shape | undefined) {
   }
   let selected: Shape[] = [nextSelectShape]
   selected.map(element => {
-    // element.properties.number_affected = element.properties.connectivity["toID"].length
     element.properties.number_affected = Object.keys(element.properties.connectivity).length
 
   })
@@ -91,10 +90,7 @@ function setConnectedShape(selectedShape?: Shape, data?: Shape[]) {
   if (!selectedShape) {
     return null
   }
-  // let connected_ids = selectedShape.properties.connectivity["toID"]
   let connected_ids = Object.keys(selectedShape.properties.connectivity).map(Number)
-  // let connected_weights = selectedShape.properties.connectivity["weight"]
-  // console.log("This element: ", selectedShape.properties.id, " connected with ", connected_ids)
   connected_shapes = data.filter((element) => connected_ids.includes(element.properties.id))
   connected_shapes.map(element => {
     element.properties.dilution = selectedShape.properties.connectivity[element.properties.id]
@@ -107,11 +103,12 @@ function getTooltip({object, layer}: PickingInfo<Shape>) {
 
   const TOOLTIP_BASE = `\
     ID: ${object.properties.id}
-    Position: ${object.properties.lat} N, ${object.properties.lon} E
+    Position: ${object.properties.lat.toFixed(4)} N, ${object.properties.lon.toFixed(4)} E
     Depth: ${object.properties.depth} m
     Restoration: ${Boolean(object.properties.rest)}
     Substrate: ${object.properties.aqc}
     Disease: ${Boolean(object.properties.disease)}
+    Population: ${object.properties.pop}
   `;
 
   const TOOLTIP_SELECTED = TOOLTIP_BASE + `\
@@ -154,10 +151,21 @@ export default function App({
       filled: true,
       getFillColor: [150, 150, 150, 150],
       getLineColor: [200, 200, 200, 250],
-      // getLineColor: [50, 50, 50, 250],
       getLineWidth: 1000,
       onClick: ({object}) => setNextSelectedShape(object),
       pickable: true
+    }),
+    new GeoJsonLayer<FeatureProperties>({
+      id: 'connected',
+      data: connectedShape,
+      stroked: true,
+      filled: true,
+      getFillColor: d => COLOR_SCALE_CONNECTED(Math.sqrt(d.properties.dilution)),
+      onClick: ({object}) => setNextSelectedShape(object),
+      pickable: true,
+      extruded: true,
+      getElevation: d => Math.sqrt(d.properties.dilution) * 100000,
+      wireframe: true
     }),
     new GeoJsonLayer<FeatureProperties>({
       id: 'selected',
@@ -167,18 +175,10 @@ export default function App({
       getFillColor: d => COLOR_SCALE_SELECTED(d.properties.number_affected),
       pickable: true,
       extruded: true,
-      getElevation: d => d.properties.number_affected * 1000 // adjust scaling
-    }),
-    new GeoJsonLayer<FeatureProperties>({
-      id: 'connected',
-      data: connectedShape,
-      stroked: true,
-      filled: true,
-      getFillColor: d => COLOR_SCALE_CONNECTED(d.properties.dilution),
-      onClick: ({object}) => setNextSelectedShape(object),
-      pickable: true,
-      extruded: true,
-      getElevation: d => d.properties.dilution * 1000000 // adjust scaling
+      getElevation: d => d.properties.number_affected,
+      getLineColor: [0, 255, 0, 250],
+      getLineWidth: 1000,
+      wireframe: true
     })
   ];
 
