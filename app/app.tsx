@@ -2,6 +2,7 @@
 import React, {useState, useMemo} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Map} from 'react-map-gl/maplibre';
+import {MapGL} from 'react-map-gl';
 import DeckGL from '@deck.gl/react';
 import {GeoJsonLayer} from '@deck.gl/layers';
 import {scaleThreshold} from 'd3-scale';
@@ -184,31 +185,22 @@ export default function App({
   ];
 
   return (
-    <DeckGL
-      layers={layers}
-      initialViewState={INITIAL_VIEW_STATE}
-      controller={true}
-      getTooltip={getTooltip}
-    >
-      <div>
-      <Map reuseMaps mapStyle={mapStyle}/>
-        <div className="control-panel">
-          <h1>Oysters Dashboard</h1>
-          <p>Some Text.</p>
-          <ul>
-            <li>text text text text</li>
-            <li>text text text text</li>
-            <li>text text text text</li>
-          </ul>
-          <p>
-            Data source: <a href="link">label</a>
-          </p>
-          <hr />
-
-          <ControlPanel/>
-        </div>
-      </div>
-    </DeckGL>
+    <div>
+    <div style={{ height: '50vh', width: '50vw', position: 'relative' }}> 
+      <DeckGL
+        layers={layers}
+        initialViewState={INITIAL_VIEW_STATE}
+        controller={true}
+        getTooltip={getTooltip}
+      >
+        <Map reuseMaps mapStyle={mapStyle}/>
+      </DeckGL>
+    </div>
+    <div className="control_panel">
+      <p>ASDF</p>
+      <ControlPanel/>
+    </div>
+    </div>
   );
 }
 
