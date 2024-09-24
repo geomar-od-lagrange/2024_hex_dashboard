@@ -9,6 +9,7 @@ import {scaleThreshold} from 'd3-scale';
 import type {Color, PickingInfo, MapViewState} from '@deck.gl/core';
 import type {Feature, Polygon, MultiPolygon} from 'geojson';
 
+import ControlPanel from './control_panel';
 
 // Source data GeoJSON
 // const DATA_URL ='./hex_features.geojson'; // eslint-disable-line
@@ -189,7 +190,24 @@ export default function App({
       controller={true}
       getTooltip={getTooltip}
     >
-      <Map reuseMaps mapStyle={mapStyle} />
+      <div>
+      <Map reuseMaps mapStyle={mapStyle}/>
+        <div className="control-panel">
+          <h1>Oysters Dashboard</h1>
+          <p>Some Text.</p>
+          <ul>
+            <li>text text text text</li>
+            <li>text text text text</li>
+            <li>text text text text</li>
+          </ul>
+          <p>
+            Data source: <a href="link">label</a>
+          </p>
+          <hr />
+
+          <ControlPanel/>
+        </div>
+      </div>
     </DeckGL>
   );
 }
