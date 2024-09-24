@@ -2,7 +2,6 @@
 import React, {useState, useMemo} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Map} from 'react-map-gl/maplibre';
-import {MapGL} from 'react-map-gl';
 import DeckGL from '@deck.gl/react';
 import {GeoJsonLayer} from '@deck.gl/layers';
 import {scaleThreshold} from 'd3-scale';
@@ -145,6 +144,8 @@ export default function App({
   const selectedShape = useMemo(() => setSelectedShape(nextSelectedShape), [nextSelectedShape]);
   const connectedShape = useMemo(() => setConnectedShape(nextSelectedShape, data), [nextSelectedShape, data]);
 
+  const [dataFromControlPanel, setDataFromControlPanel] = useState(100000)
+
   const layers = [
     new GeoJsonLayer<FeatureProperties>({
       id: 'base',
@@ -166,7 +167,7 @@ export default function App({
       onClick: ({object}) => setNextSelectedShape(object),
       pickable: true,
       extruded: true,
-      getElevation: d => Math.sqrt(d.properties.dilution) * 100000,
+      getElevation: d => Math.sqrt(d.properties.dilution) * dataFromControlPanel,
       wireframe: true
     }),
     new GeoJsonLayer<FeatureProperties>({
@@ -192,13 +193,14 @@ export default function App({
         initialViewState={INITIAL_VIEW_STATE}
         controller={true}
         getTooltip={getTooltip}
+
       >
         <Map reuseMaps mapStyle={mapStyle}/>
       </DeckGL>
     </div>
     <div className="control_panel">
       <p>ASDF</p>
-      <ControlPanel/>
+      <ControlPanel setDataFromControlPanel={setDataFromControlPanel}/>
     </div>
     </div>
   );

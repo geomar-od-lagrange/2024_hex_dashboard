@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 
-export default function Counter() {
+export default function ControlPanel({setDataFromControlPanel}) {
     const [checked, setChecked] = useState(false);
     const [range, setRange] = useState(50);
   
@@ -12,7 +12,9 @@ export default function Counter() {
     function handleRangeChange(e) {
       setRange(e.target.value);
       console.log(range)
-    }
+    };
+
+    setDataFromControlPanel(range);
   
     return (
     <div>
@@ -29,7 +31,7 @@ export default function Counter() {
         <input
             type="range"
             min="0"
-            max="100"
+            max="900000000"
             onChange={handleRangeChange}
         />
       </div>
