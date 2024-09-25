@@ -67,34 +67,33 @@ type FeatureProperties = {
   rest: boolean;
   aqc: number;
   pop: number;
-  connectivity: Dictionary<number>;
+  connectivity: Dictionary<string>;
   number_affected?: number;
-  dilution?: number;
+  dilution?: string;
 };
 
 type Shape = Feature<Polygon | MultiPolygon, FeatureProperties>;
 
-function setSelectedShape(nextSelectShape?: Shape | undefined) {
+function setSelectedShape(dataControlPanelRadioButton: string, nextSelectShape?: Shape | undefined) {
   if (!nextSelectShape) {
     return null;
   }
   let selected: Shape[] = [nextSelectShape]
   selected.map(element => {
-    element.properties.number_affected = Object.keys(element.properties.connectivity).length
-
+    element.properties.number_affected = Object.keys(element.properties.connectivity[dataControlPanelRadioButton]).length
   })
   return selected;
 }
 
-function setConnectedShape(selectedShape?: Shape, data?: Shape[]) {
+function setConnectedShape(dataControlPanelRadioButton: string, selectedShape?: Shape, data?: Shape[]) {
   let connected_shapes: Shape[] = undefined
   if (!selectedShape) {
     return null
   }
-  let connected_ids = Object.keys(selectedShape.properties.connectivity).map(Number)
+  let connected_ids = Object.keys(selectedShape.properties.connectivity[dataControlPanelRadioButton]).map(Number)
   connected_shapes = data.filter((element) => connected_ids.includes(element.properties.id))
   connected_shapes.map(element => {
-    element.properties.dilution = selectedShape.properties.connectivity[element.properties.id]
+    element.properties.dilution = selectedShape.properties.connectivity[dataControlPanelRadioButton][element.properties.id]
   })
   return connected_shapes
 }
@@ -140,11 +139,14 @@ export default function App({
   data?: Shape[];
   mapStyle?: string;
 }) {
-  const [nextSelectedShape, setNextSelectedShape] = useState<Shape>();
-  const selectedShape = useMemo(() => setSelectedShape(nextSelectedShape), [nextSelectedShape]);
-  const connectedShape = useMemo(() => setConnectedShape(nextSelectedShape, data), [nextSelectedShape, data]);
 
-  const [dataFromControlPanel, setDataFromControlPanel] = useState(100000)
+  const [dataControlPanelSlider, setControlPanelSlider] = useState(10000)
+  const [dataControlPanelRadioButton, setControlPanelRadioButton] = useState()
+
+  const [nextSelectedShape, setNextSelectedShape] = useState<Shape>();
+  const selectedShape = useMemo(() => setSelectedShape(dataControlPanelRadioButton, nextSelectedShape), [nextSelectedShape, dataControlPanelSlider, dataControlPanelRadioButton]);
+  const connectedShape = useMemo(() => setConnectedShape(dataControlPanelRadioButton, nextSelectedShape, data), [nextSelectedShape, data, dataControlPanelSlider, dataControlPanelRadioButton]);
+
 
   const layers = [
     new GeoJsonLayer<FeatureProperties>({
@@ -163,11 +165,11 @@ export default function App({
       data: connectedShape,
       stroked: true,
       filled: true,
-      getFillColor: d => COLOR_SCALE_CONNECTED(Math.sqrt(d.properties.dilution)),
+      getFillColor: d => COLOR_SCALE_CONNECTED(Math.sqrt(Number(d.properties.dilution))),
       onClick: ({object}) => setNextSelectedShape(object),
       pickable: true,
       extruded: true,
-      getElevation: d => Math.sqrt(d.properties.dilution) * dataFromControlPanel,
+      getElevation: d => Math.sqrt(Number(d.properties.dilution)) * dataControlPanelSlider,
       wireframe: true
     }),
     new GeoJsonLayer<FeatureProperties>({
@@ -187,20 +189,21 @@ export default function App({
 
   return (
     <div>
-    <div style={{ height: '50vh', width: '50vw', position: 'relative' }}> 
+    <div> 
       <DeckGL
         layers={layers}
         initialViewState={INITIAL_VIEW_STATE}
         controller={true}
         getTooltip={getTooltip}
-
       >
         <Map reuseMaps mapStyle={mapStyle}/>
       </DeckGL>
     </div>
-    <div className="control_panel">
+    <div className="control-panel">
       <p>ASDF</p>
-      <ControlPanel setDataFromControlPanel={setDataFromControlPanel}/>
+      <ControlPanel 
+      setControlPanelSlider={setControlPanelSlider} 
+      setControlPanelRadioButton={setControlPanelRadioButton}/>
     </div>
     </div>
   );
@@ -210,7 +213,7 @@ export async function renderToDOM(container: HTMLDivElement) {
   const root = createRoot(container);
   root.render(<App />);
 
-  const resp = await fetch(DATA_URL);
+  const resp = await fetch(DATA_URL)
   const {features} = await resp.json();
   root.render(<App data={features} />);
 }
