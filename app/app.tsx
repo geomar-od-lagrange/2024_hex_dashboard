@@ -6,14 +6,18 @@ import DeckGL from '@deck.gl/react';
 import {GeoJsonLayer} from '@deck.gl/layers';
 import {scaleThreshold} from 'd3-scale';
 
+import { load, parse } from "@loaders.gl/core";
+import { ZipLoader } from "@loaders.gl/zip";
+import {_GeoJSONLoader} from '@loaders.gl/json';
+
 import type {Color, PickingInfo, MapViewState} from '@deck.gl/core';
 import type {Feature, Polygon, MultiPolygon} from 'geojson';
 
 import ControlPanel from './control_panel';
 
 // Source data GeoJSON
-// const DATA_URL ='./hex_features.geojson'; // eslint-disable-line
-const DATA_URL ='./hex_features_real.geojson'; // eslint-disable-line
+const DATA_URL ='./hex_features_real.geojson.zip'; // eslint-disable-line
+const DATA_FILENAME = 'hex_features_real.geojson'; 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json'
 
 export const COLOR_SCALE_CONNECTED = scaleThreshold<number, Color>()
@@ -213,7 +217,11 @@ export async function renderToDOM(container: HTMLDivElement) {
   const root = createRoot(container);
   root.render(<App />);
 
-  const resp = await fetch(DATA_URL)
-  const {features} = await resp.json();
+  // const resp = await fetch(DATA_URL)
+  // const {features} = await resp.json();
+  const zip = await load(DATA_URL, ZipLoader);
+  const geojson =  await parse(zip[DATA_FILENAME], _GeoJSONLoader);
+  const features = geojson["features"]
+
   root.render(<App data={features} />);
 }
