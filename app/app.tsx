@@ -17,7 +17,7 @@ import ControlPanel from './control_panel';
 
 // Source data GeoJSON
 const DATA_URL ='./hex_features_real.geojson.zip'; // eslint-disable-line
-const DATA_FILENAME = 'hex_features_real.geojson'; 
+const DATA_FILENAME ='hex_features_real.geojson'; 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json'
 
 export const COLOR_SCALE_CONNECTED = scaleThreshold<number, Color>()
@@ -115,13 +115,13 @@ function getTooltip({object, layer}: PickingInfo<Shape>) {
     Population: ${object.properties.pop}
   `;
 
-  const TOOLTIP_SELECTED = TOOLTIP_BASE + `\
-    Number affected: ${object.properties.number_affected}
-  `;
-
   const TOOLTIP_CONNECTED = TOOLTIP_BASE + `\
     Dilution: ${object.properties.dilution}
   `;
+
+  const TOOLTIP_SELECTED = TOOLTIP_CONNECTED + `\
+    Number affected: ${object.properties.number_affected}
+`;
 
   if (layer.id == 'base') {
     return object && TOOLTIP_BASE
@@ -134,7 +134,6 @@ function getTooltip({object, layer}: PickingInfo<Shape>) {
   }
 }
 
-
 /* eslint-disable react/no-deprecated */
 export default function App({
   data,
@@ -144,12 +143,19 @@ export default function App({
   mapStyle?: string;
 }) {
 
-  const [dataControlPanelSlider, setControlPanelSlider] = useState(10000)
+  const [dataControlPanelSlider, setControlPanelSlider] = useState(2010)
   const [dataControlPanelRadioButton, setControlPanelRadioButton] = useState()
+  const [dataControlPanelCheckBox, setControlPanelCheckBox] = useState(true)
 
   const [nextSelectedShape, setNextSelectedShape] = useState<Shape>();
-  const selectedShape = useMemo(() => setSelectedShape(dataControlPanelRadioButton, nextSelectedShape), [nextSelectedShape, dataControlPanelSlider, dataControlPanelRadioButton]);
-  const connectedShape = useMemo(() => setConnectedShape(dataControlPanelRadioButton, nextSelectedShape, data), [nextSelectedShape, data, dataControlPanelSlider, dataControlPanelRadioButton]);
+  const selectedShape = useMemo(() => setSelectedShape(
+    dataControlPanelRadioButton, nextSelectedShape), 
+    [nextSelectedShape, dataControlPanelRadioButton, dataControlPanelCheckBox]
+  );
+  const connectedShape = useMemo(() => setConnectedShape(
+    dataControlPanelRadioButton, nextSelectedShape, data), 
+    [nextSelectedShape, data, dataControlPanelRadioButton, dataControlPanelCheckBox]
+  );
 
 
   const layers = [
@@ -172,22 +178,28 @@ export default function App({
       getFillColor: d => COLOR_SCALE_CONNECTED(Math.sqrt(Number(d.properties.dilution))),
       onClick: ({object}) => setNextSelectedShape(object),
       pickable: true,
-      extruded: true,
-      getElevation: d => Math.sqrt(Number(d.properties.dilution)) * dataControlPanelSlider,
-      wireframe: true
+      extruded: dataControlPanelCheckBox,
+      getElevation: d => Math.sqrt(Number(d.properties.dilution)) * 100000,
+      wireframe: true,
+      updateTriggers: {
+        extruded: dataControlPanelCheckBox
+      }
     }),
     new GeoJsonLayer<FeatureProperties>({
       id: 'selected',
       data: selectedShape,
       stroked: true,
       filled: true,
-      getFillColor: d => COLOR_SCALE_SELECTED(d.properties.number_affected),
+      getFillColor: d => COLOR_SCALE_CONNECTED(Math.sqrt(Number(d.properties.dilution))),
       pickable: true,
-      extruded: true,
-      getElevation: d => d.properties.number_affected,
-      getLineColor: [0, 255, 0, 250],
+      extruded: dataControlPanelCheckBox,
+      getElevation: d => Math.sqrt(Number(d.properties.dilution)) * 100000, 
+      wireframe: true,
+      getLineColor: [255, 255, 255, 255],
       getLineWidth: 1000,
-      wireframe: true
+      updateTriggers: {
+        extruded: dataControlPanelCheckBox
+      }
     })
   ];
 
@@ -204,10 +216,11 @@ export default function App({
       </DeckGL>
     </div>
     <div className="control-panel">
-      <p>ASDF</p>
+      <p><b>Oysters dispersal</b></p>
       <ControlPanel 
       setControlPanelSlider={setControlPanelSlider} 
-      setControlPanelRadioButton={setControlPanelRadioButton}/>
+      setControlPanelRadioButton={setControlPanelRadioButton}
+      setControlPanelCheckBox={setControlPanelCheckBox}/>
     </div>
     </div>
   );
