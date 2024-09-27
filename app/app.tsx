@@ -17,7 +17,7 @@ import type {Feature, Polygon, MultiPolygon} from 'geojson';
 import ControlPanel from './control_panel';
 
 // Source data GeoJSON
-const DATA_URL ='./hex_features_real.geojson.zip'; // eslint-disable-line
+const DATA_URL ='https://storage.googleapis.com/2024_hex_dashboard/hex_features_real.geojson.zip'; // eslint-disable-line
 const DATA_FILENAME ='hex_features_real.geojson'; 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json'
 
