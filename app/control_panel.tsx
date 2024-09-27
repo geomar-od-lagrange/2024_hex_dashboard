@@ -7,7 +7,7 @@ export default function ControlPanel(
     const [radiobutton_days, setRadioButtonDays] = useState("00d-07d");
     const [radiobutton_depth, setRadioButtonDepth] = useState("05m");
     const [slider, setSlider] = useState(2020);
-    const [checkbox, setCheckBox] = useState(true);
+    const [checkbox, setCheckBox] = useState(false);
   
     function handleRadioButtonsDays(e) {
       setRadioButtonDays(e.target.value);
@@ -55,17 +55,17 @@ export default function ControlPanel(
 
           <div>
             <input type="radio" id="00d-07d" name="radiobutton_days" value="00d-07d" onChange={handleRadioButtonsDays} defaultChecked />
-            <label>00d-07d</label>
+            <label>0-7d -- free Bonamia</label>
           </div>
 
           <div>
             <input type="radio" id="07d-14d" name="radiobutton_days" value="07d-14d" onChange={handleRadioButtonsDays}/>
-            <label>07d-14d</label>
+            <label>7-14d -- larvae, fast dev</label>
           </div>
 
           <div>
             <input type="radio" id="14d-28d" name="radiobutton_days" value="14d-28d" onChange={handleRadioButtonsDays}/>
-            <label>14d-28d</label>
+            <label>14-28d -- larvae, slow dev</label>
           </div>
         </fieldset>
 
@@ -93,7 +93,7 @@ export default function ControlPanel(
           <legend>Settings:</legend>
 
           <div>
-            <input type="checkbox" id="3D" name="3D" onChange={handleCheckBox} defaultChecked />
+            <input type="checkbox" id="3D" name="3D" onChange={handleCheckBox} />
             <label>render in 3D</label>
           </div>
         </fieldset>
