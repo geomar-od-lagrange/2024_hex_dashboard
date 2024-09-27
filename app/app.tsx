@@ -50,12 +50,12 @@ export const COLOR_SCALE_CONNECTED = scaleThreshold<number, Color>()
   ]);
 
 const INITIAL_VIEW_STATE_PROPS = {
-  longitude: 10,
+  longitude: 2.0,
   latitude: 50.7,
-  zoom: 3,
+  zoom: 4,
   maxZoom: 15,
   pitch: 30,
-  bearing: 30
+  bearing: 15
 };
 
 const INITIAL_VIEW_STATE: {
@@ -112,26 +112,26 @@ type FeatureProperties = {
 
 type Shape = Feature<Polygon | MultiPolygon, FeatureProperties>;
 
-function setSelectedShape(dataControlPanelRadioButton: string, nextSelectShape?: Shape | undefined) {
+function setSelectedShape(dataControlPanelRadioButtonDays: string, dataControlPanelRadioButtonDepth: string, nextSelectShape?: Shape | undefined) {
   if (!nextSelectShape) {
     return null;
   }
   let selected: Shape[] = [nextSelectShape]
   selected.map(element => {
-    element.properties.number_affected = Object.keys(element.properties.connectivity[dataControlPanelRadioButton]).length
+    element.properties.number_affected = Object.keys(element.properties.connectivity[dataControlPanelRadioButtonDays + "_" + dataControlPanelRadioButtonDepth]).length
   })
   return selected;
 }
 
-function setConnectedShape(dataControlPanelRadioButton: string, selectedShape?: Shape, data?: Shape[]) {
+function setConnectedShape(dataControlPanelRadioButtonDays: string, dataControlPanelRadioButtonDepth: string, selectedShape?: Shape, data?: Shape[]) {
   let connected_shapes: Shape[] = undefined
   if (!selectedShape) {
     return null
   }
-  let connected_ids = Object.keys(selectedShape.properties.connectivity[dataControlPanelRadioButton]).map(Number)
+  let connected_ids = Object.keys(selectedShape.properties.connectivity[dataControlPanelRadioButtonDays + "_" + dataControlPanelRadioButtonDepth]).map(Number)
   connected_shapes = data.filter((element) => connected_ids.includes(element.properties.id))
   connected_shapes.map(element => {
-    element.properties.dilution = selectedShape.properties.connectivity[dataControlPanelRadioButton][element.properties.id]
+    element.properties.dilution = selectedShape.properties.connectivity[dataControlPanelRadioButtonDays + "_" + dataControlPanelRadioButtonDepth][element.properties.id]
   })
   return connected_shapes
 }
@@ -172,7 +172,7 @@ function getTooltip({object, layer}: PickingInfo<Shape>) {
 export default function App({
   data,
   mapStyle = MAP_STYLE,
-  multiView = true
+  multiView = false
 }: {
   data?: Shape[];
   mapStyle?: string;
@@ -181,17 +181,18 @@ export default function App({
 
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [dataControlPanelSlider, setControlPanelSlider] = useState(2010)
-  const [dataControlPanelRadioButton, setControlPanelRadioButton] = useState()
+  const [dataControlPanelRadioButtonDays, setControlPanelRadioButtonDays] = useState()
+  const [dataControlPanelRadioButtonDepth, setControlPanelRadioButtonDepth] = useState()
   const [dataControlPanelCheckBox, setControlPanelCheckBox] = useState(true)
 
   const [nextSelectedShape, setNextSelectedShape] = useState<Shape>();
   const selectedShape = useMemo(() => setSelectedShape(
-    dataControlPanelRadioButton, nextSelectedShape), 
-    [nextSelectedShape, dataControlPanelRadioButton, dataControlPanelCheckBox]
+    dataControlPanelRadioButtonDays, dataControlPanelRadioButtonDepth, nextSelectedShape), 
+    [nextSelectedShape, dataControlPanelRadioButtonDays, dataControlPanelRadioButtonDepth, dataControlPanelCheckBox]
   );
   const connectedShape = useMemo(() => setConnectedShape(
-    dataControlPanelRadioButton, nextSelectedShape, data), 
-    [nextSelectedShape, data, dataControlPanelRadioButton, dataControlPanelCheckBox]
+    dataControlPanelRadioButtonDays, dataControlPanelRadioButtonDepth, nextSelectedShape, data), 
+    [nextSelectedShape, data, dataControlPanelRadioButtonDays, dataControlPanelRadioButtonDepth, dataControlPanelCheckBox]
   );
 
   const onViewStateChange = useCallback(
@@ -275,7 +276,8 @@ export default function App({
         <p><b>Oysters dispersal</b></p>
         <ControlPanel 
         setControlPanelSlider={setControlPanelSlider} 
-        setControlPanelRadioButton={setControlPanelRadioButton}
+        setControlPanelRadioButtonDays={setControlPanelRadioButtonDays}
+        setControlPanelRadioButtonDepth={setControlPanelRadioButtonDepth}
         setControlPanelCheckBox={setControlPanelCheckBox}/>
       </div>
     </div>
