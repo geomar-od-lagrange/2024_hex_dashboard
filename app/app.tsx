@@ -1,8 +1,9 @@
 /* global fetch */
-import React, {useState, useMemo} from 'react';
+import React, {useState, useMemo, useCallback} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Map} from 'react-map-gl/maplibre';
 import DeckGL from '@deck.gl/react';
+import {MapView} from '@deck.gl/core';
 import {GeoJsonLayer} from '@deck.gl/layers';
 import {scaleThreshold} from 'd3-scale';
 
@@ -10,7 +11,7 @@ import { load, parse } from "@loaders.gl/core";
 import { ZipLoader } from "@loaders.gl/zip";
 import {_GeoJSONLoader} from '@loaders.gl/json';
 
-import type {Color, PickingInfo, MapViewState} from '@deck.gl/core';
+import type {Color, PickingInfo, MapViewState, ViewStateChangeParameters} from '@deck.gl/core';
 import type {Feature, Polygon, MultiPolygon} from 'geojson';
 
 import ControlPanel from './control_panel';
@@ -48,7 +49,7 @@ export const COLOR_SCALE_CONNECTED = scaleThreshold<number, Color>()
     [127,39,4,250],
   ]);
 
-const INITIAL_VIEW_STATE: MapViewState = {
+const INITIAL_VIEW_STATE_PROPS = {
   longitude: 10,
   latitude: 50.7,
   zoom: 3,
@@ -56,6 +57,39 @@ const INITIAL_VIEW_STATE: MapViewState = {
   pitch: 30,
   bearing: 30
 };
+
+const INITIAL_VIEW_STATE: {
+  main: MapViewState; 
+  splitleft: MapViewState;
+  splitright: MapViewState
+} = {
+  main: INITIAL_VIEW_STATE_PROPS,
+  splitleft: INITIAL_VIEW_STATE_PROPS,
+  splitright: INITIAL_VIEW_STATE_PROPS
+};
+
+const mainView = new MapView({
+  id: 'main', 
+  width: '100%',
+  height: '100%',
+  controller: true
+});
+
+const splitleftView = new MapView({
+  id: 'splitleft', 
+  width: '50%',
+  height: '100%',
+  x: '0%',
+  controller: true,
+});
+
+const splitrightView = new MapView({
+  id: 'splitright', 
+  width: '50%',
+  height: '100%',
+  x: '50%',
+  controller: true,
+});
 
 interface Dictionary<T> {
   [Key: string]: T;
@@ -137,12 +171,15 @@ function getTooltip({object, layer}: PickingInfo<Shape>) {
 /* eslint-disable react/no-deprecated */
 export default function App({
   data,
-  mapStyle = MAP_STYLE
+  mapStyle = MAP_STYLE,
+  multiView = true
 }: {
   data?: Shape[];
   mapStyle?: string;
+  multiView?: boolean
 }) {
 
+  const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [dataControlPanelSlider, setControlPanelSlider] = useState(2010)
   const [dataControlPanelRadioButton, setControlPanelRadioButton] = useState()
   const [dataControlPanelCheckBox, setControlPanelCheckBox] = useState(true)
@@ -157,6 +194,16 @@ export default function App({
     [nextSelectedShape, data, dataControlPanelRadioButton, dataControlPanelCheckBox]
   );
 
+  const onViewStateChange = useCallback(
+    ({viewState: newViewState}: ViewStateChangeParameters<MapViewState>) => {
+      setViewState(currentViewState => ({
+        main: newViewState,
+        splitleft: newViewState,
+        splitright: newViewState
+      }));
+    },
+    []
+  );
 
   const layers = [
     new GeoJsonLayer<FeatureProperties>({
@@ -205,23 +252,32 @@ export default function App({
 
   return (
     <div>
-    <div> 
-      <DeckGL
-        layers={layers}
-        initialViewState={INITIAL_VIEW_STATE}
-        controller={true}
-        getTooltip={getTooltip}
-      >
-        <Map reuseMaps mapStyle={mapStyle}/>
-      </DeckGL>
-    </div>
-    <div className="control-panel">
-      <p><b>Oysters dispersal</b></p>
-      <ControlPanel 
-      setControlPanelSlider={setControlPanelSlider} 
-      setControlPanelRadioButton={setControlPanelRadioButton}
-      setControlPanelCheckBox={setControlPanelCheckBox}/>
-    </div>
+      <div> 
+        <DeckGL
+          layers={layers}
+          views={multiView ? [splitleftView, splitrightView] : mainView}
+          viewState={viewState}
+          onViewStateChange={onViewStateChange}
+          // initialViewState={INITIAL_VIEW_STATE}
+          // controller={true}
+          getTooltip={getTooltip}
+        >
+          {/* <Map reuseMaps mapStyle={mapStyle}/> */}
+          {
+            multiView ? 
+            <><Map id='splitleft' reuseMaps mapStyle={"https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json"}/> 
+            <Map id='spli' reuseMaps mapStyle={"https://basemaps.cartocdn.com/gl/matter-nolabels-gl-style/style.json"}/></> : 
+            <Map id='main' reuseMaps mapStyle={mapStyle}/>
+          }
+        </DeckGL>
+      </div>
+      <div className="control-panel">
+        <p><b>Oysters dispersal</b></p>
+        <ControlPanel 
+        setControlPanelSlider={setControlPanelSlider} 
+        setControlPanelRadioButton={setControlPanelRadioButton}
+        setControlPanelCheckBox={setControlPanelCheckBox}/>
+      </div>
     </div>
   );
 }
