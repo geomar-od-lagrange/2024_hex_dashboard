@@ -22,14 +22,22 @@
 
   .col-left {
     display: table-cell;
-    width: 50%;
+    width: 30%;
     text-align: left;
     font-size: medium;
   }
 
+  .col-middle {
+    display: table-cell;
+    width: 30%;
+    text-align: middle;
+    font-size: medium;
+  }
+
+
   .col-right {
     display: table-cell;
-    width: 50%;
+    width: 30%;
     text-align: right;
     font-size: medium;
   }
