@@ -212,8 +212,8 @@ export default function App({
       data,
       stroked: true,
       filled: true,
-      getFillColor: [150, 150, 150, 150],
-      getLineColor: [200, 200, 200, 250],
+      getFillColor: [200, 200, 200, 50],
+      getLineColor: [100, 100, 100, 100],
       getLineWidth: 1000,
       onClick: ({object}) => setNextSelectedShape(object),
       pickable: true
@@ -223,6 +223,7 @@ export default function App({
       data: connectedShape,
       stroked: true,
       filled: true,
+      getLineWidth: 1000,
       getFillColor: d => COLOR_SCALE_CONNECTED(Math.sqrt(Number(d.properties.dilution))),
       onClick: ({object}) => setNextSelectedShape(object),
       pickable: true,
@@ -273,7 +274,7 @@ export default function App({
         </DeckGL>
       </div>
       <div className="control-panel">
-        <p><b>Oysters dispersal</b></p>
+        <p><b>Oyster larvae dispersal (forward)</b></p>
         <ControlPanel 
         setControlPanelSlider={setControlPanelSlider} 
         setControlPanelRadioButtonDays={setControlPanelRadioButtonDays}
