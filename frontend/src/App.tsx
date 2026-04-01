@@ -3,9 +3,9 @@ import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
 import StaticMap from 'react-map-gl';
 import maplibregl from 'maplibre-gl';
-import ControlPanel from './ControlPanel';
+import ControlPanel, { type DepthWeights, type TimeWeights } from './ControlPanel';
 import InfoBox from './InfoBox';
-import { theme } from './theme';
+import { theme, type RGBA } from './theme';
 
 // Free map styles (no API key required):
 // - https://tiles.openfreemap.org/styles/positron (minimal light gray)
@@ -15,8 +15,16 @@ import { theme } from './theme';
 // - https://demotiles.maplibre.org/style.json (original colorful demo)
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
+export type ConnDirection = 'downstream' | 'upstream';
+
 type Connection = {
   end_id: number;
+  weight: number;
+  raw_weight?: number;
+};
+
+type SourceConnection = {
+  start_id: number;
   weight: number;
   raw_weight?: number;
 };
@@ -50,8 +58,8 @@ interface FeatureCollection {
 }
 
 function App() {
-  const [selectedDepths, setSelectedDepths] = useState<string[]>(['05m']);
-  const [selectedTimes, setSelectedTimes] = useState<string[]>(['07d-14d']);
+  const [depthWeights, setDepthWeights] = useState<DepthWeights>({ '05m': 1, '10m': 1, '15m': 1 });
+  const [timeWeights, setTimeWeights] = useState<TimeWeights>({ '00d-07d': 1, '07d-14d': 1, '14d-28d': 1 });
   const [feature, setFeature] = useState<FeatureCollection | null>(null);
   const [metadata, setMetadata] = useState<Record<number, Metadata> | null>(null);
 
@@ -64,9 +72,22 @@ function App() {
   const [isHabitableShown, setHabitable] = useState<boolean>(true);
   const [isHistoricHighlighted, setHistoric] = useState<boolean>(true);
   
+  const [direction, setDirection] = useState<ConnDirection>('downstream');
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [clickIds, setClickIds] = useState<number[]>([]);
   const [tooltip, setTooltip] = useState<{x: number; y: number; content: string} | null>(null);
+
+  // Derive depth params for API
+  const activeDepths = Object.entries(depthWeights).filter(([, w]) => w > 0);
+  const depthTotal   = activeDepths.reduce((s, [, w]) => s + w, 0);
+  const depthParam   = activeDepths.map(([d]) => d).join(',');
+  const depthWeightParam = activeDepths.map(([, w]) => (w / depthTotal).toFixed(4)).join(',');
+
+  // Derive time params for API
+  const activeTimes  = Object.entries(timeWeights).filter(([, w]) => w > 0);
+  const timeTotal    = activeTimes.reduce((s, [, w]) => s + w, 0);
+  const timeParam    = activeTimes.map(([t]) => t).join(',');
+  const timeWeightParam = activeTimes.map(([, w]) => (w / timeTotal).toFixed(4)).join(',');
 
   //fetch geojson features for display
   useEffect(() => {
@@ -109,45 +130,118 @@ function App() {
   };
 
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [sourceConnections, setSourceConnections] = useState<SourceConnection[]>([]);
 
-  // Fetch connectivity whenever (clickId, selectedTime, selectedDepth) change
+  // Downstream fetch
   useEffect(() => {
-    if (clickIds?.length) {
-
-      // TODO: Add request timeout (10s) for better UX
-      const ctrl = new AbortController();
-      const fetchURL = `api/connectivity?depth=${selectedDepths.join(',')}&time_range=${selectedTimes.join(',')}&start_id=${clickIds.join(',')}&op=mean`;
-      console.log("Trying to fetch: ", fetchURL);
-    
-      (async () => {
-        try {
-          const res = await fetch(fetchURL, { signal: ctrl.signal });
-          if (!res.ok) throw new Error(res.statusText);
-          const data: Connection[] = await res.json();
-          setConnections(data);
-        } catch (e: any) {
-          if (e.name !== 'AbortError') console.error('Fetch error:', e);
-        }
-      })();
-    return () => ctrl.abort();
+    if (direction !== 'downstream' || !clickIds?.length || !depthParam || !timeParam) {
+      setConnections([]);
+      return;
     }
-    setConnections([]);
-  }, [clickIds, selectedTimes, selectedDepths]);
+    const ctrl = new AbortController();
+    const fetchURL = `api/connectivity?depth=${depthParam}&depth_weight=${depthWeightParam}&time_range=${timeParam}&time_weight=${timeWeightParam}&start_id=${clickIds.join(',')}`;
+    console.log('Trying to fetch:', fetchURL);
+    (async () => {
+      try {
+        const res = await fetch(fetchURL, { signal: ctrl.signal });
+        if (!res.ok) throw new Error(res.statusText);
+        const data: Connection[] = await res.json();
+        setConnections(data);
+      } catch (e: any) {
+        if (e.name !== 'AbortError') console.error('Fetch error:', e);
+      }
+    })();
+    return () => ctrl.abort();
+  }, [clickIds, timeParam, timeWeightParam, depthParam, depthWeightParam, direction]);
+
+  // Upstream fetch
+  useEffect(() => {
+    if (direction !== 'upstream' || !clickIds?.length || !depthParam || !timeParam) {
+      setSourceConnections([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    const fetchURL = `api/connectivity-sources?depth=${depthParam}&depth_weight=${depthWeightParam}&time_range=${timeParam}&time_weight=${timeWeightParam}&end_id=${clickIds.join(',')}&habitable=${isHabitableShown}`;
+    console.log('Trying to fetch:', fetchURL);
+    (async () => {
+      try {
+        const res = await fetch(fetchURL, { signal: ctrl.signal });
+        if (!res.ok) throw new Error(res.statusText);
+        const data: SourceConnection[] = await res.json();
+        setSourceConnections(data);
+      } catch (e: any) {
+        if (e.name !== 'AbortError') console.error('Fetch error:', e);
+      }
+    })();
+    return () => ctrl.abort();
+  }, [clickIds, timeParam, timeWeightParam, depthParam, depthWeightParam, direction, isHabitableShown]);
 
   const clearHex = () => {
     setClickIds([]);
     setConnections([]);
+    setSourceConnections([]);
   }
 
-  // Derive weights from the latest connections; new Map reference whenever connections changes
-  const weightMap = useMemo(
-    () => new Map<number, number>(connections.map(c => [c.end_id, c.weight])),
-    [connections]
-  );
-  const rawWeightMap = useMemo(
-    () => new Map<number, number>(connections.filter(c => c.raw_weight != null).map(c => [c.end_id, c.raw_weight!])),
-    [connections]
-  );
+  // Derive weights from the active direction's connections
+  const weightMap = useMemo(() => {
+    if (direction === 'downstream')
+      return new Map<number, number>(connections.map(c => [c.end_id, c.weight]));
+    return new Map<number, number>(sourceConnections.map(c => [c.start_id, c.weight]));
+  }, [direction, connections, sourceConnections]);
+
+  const rawWeightMap = useMemo(() => {
+    if (direction === 'downstream')
+      return new Map<number, number>(connections.filter(c => c.raw_weight != null).map(c => [c.end_id, c.raw_weight!]));
+    return new Map<number, number>(sourceConnections.filter(c => c.raw_weight != null).map(c => [c.start_id, c.raw_weight!]));
+  }, [direction, connections, sourceConnections]);
+
+  // Visual state for each hex — single source of truth for elevation and color.
+  // Separates rendering concerns from raw data (rawWeightMap is used only for tooltips).
+  //
+  //  connected        – in weightMap, shown with weight-based elevation + color
+  //  connected-dimmed – in weightMap but non-habitable in downstream+habitable mode
+  //                     shown flat with a de-saturated color (de-emphasised target)
+  //  excluded         – NOT in weightMap, non-habitable, upstream+habitable ON
+  //                     shown flat in light gray (excluded from the calculation)
+  //  dimmed           – NOT in weightMap, non-habitable, downstream+habitable ON
+  //                     shown flat in dark gray (deep/uninhabitable area)
+  type HexDisplayState =
+    | { kind: 'connected';        weight: number }
+    | { kind: 'connected-dimmed'; weight: number }
+    | { kind: 'excluded' }
+    | { kind: 'dimmed' };
+
+  const hexDisplayMap = useMemo(() => {
+    const map = new Map<number, HexDisplayState>();
+    if (!metadata) return map;
+
+    const isNonHabitable = (id: number) => {
+      const m = metadata[id];
+      return m != null && m.habitable == 0;
+    };
+
+    // Pass 1: all hexes in weightMap
+    for (const [id, w] of weightMap) {
+      if (isNonHabitable(id) && isHabitableShown && direction === 'downstream') {
+        map.set(id, { kind: 'connected-dimmed', weight: w });
+      } else {
+        map.set(id, { kind: 'connected', weight: w });
+      }
+    }
+
+    // Pass 2: non-habitable unconnected hexes when habitable filter is on
+    if (isHabitableShown) {
+      for (const idKey of Object.keys(metadata)) {
+        const id = Number(idKey);
+        if (map.has(id)) continue;
+        if (isNonHabitable(id)) {
+          map.set(id, direction === 'upstream' ? { kind: 'excluded' } : { kind: 'dimmed' });
+        }
+      }
+    }
+
+    return map;
+  }, [weightMap, metadata, isHabitableShown, direction]);
 
   // Helper: add z-coordinate to all positions in a geometry
   const addZToGeometry = (geometry: any, z: number): any => {
@@ -167,11 +261,11 @@ function App() {
     geometry: addZToGeometry(f.geometry, z),
   });
 
-  // Calculate connectivity height for a hex
+  // Calculate connectivity height for a hex (used to stack category layers)
   const getConnHeight = (id: number) => {
-    if (isHabitableShown && metadata && metadata[id]?.habitable == 0) return 0;
-    const w = weightMap.get(id);
-    return w !== undefined ? theme.elevation.getElevation(w) : 0;
+    const state = hexDisplayMap.get(id);
+    if (!state || state.kind !== 'connected') return 0;
+    return theme.elevation.getElevation(state.weight);
   };
 
   // Common layer properties
@@ -198,7 +292,10 @@ function App() {
       if (!data) return;
       const rawWeight = rawWeightMap.get(info.object.properties.id);
       const concLine = (() => {
-        if (rawWeight == null || rawWeight <= 0) return 'rel conc 0';
+        if (rawWeight == null || rawWeight <= 0) return direction === 'upstream' ? 'source contrib 0%' : 'rel conc 0';
+        if (direction === 'upstream') {
+          return `source contrib ${(rawWeight * 100).toFixed(2)}%`;
+        }
         const exp = Math.floor(Math.log10(rawWeight));
         const mantissa = rawWeight / Math.pow(10, exp);
         return `rel conc ${mantissa.toFixed(2)} \u00b7 10<sup>${exp}</sup>`;
@@ -259,27 +356,34 @@ function App() {
           ...commonLayerProps,
           ...interactionHandlers,
           updateTriggers: {
-            getFillColor: [hoveredId, weightMap, clickIds, isHabitableShown],
-            getElevation: [weightMap, isHabitableShown],
+            getFillColor: [hexDisplayMap, hoveredId],
+            getElevation: [hexDisplayMap],
           },
           getElevation: (d: any) => {
-            const id = d.properties.id;
-            if (isHabitableShown && metadata && metadata[id]?.habitable == 0) return 0;
-            const w = weightMap.get(id);
-            if (w !== undefined) return theme.elevation.getElevation(w);
-            return theme.elevation.default;
+            const state = hexDisplayMap.get(d.properties.id);
+            if (!state || state.kind !== 'connected') return 0;
+            return theme.elevation.getElevation(state.weight);
           },
           getFillColor: (d: any) => {
             const id = d.properties.id;
-            const isDeep = isHabitableShown && metadata && metadata[id]?.habitable == 0;
             if (id === hoveredId) return theme.hex.hovered;
-            const w = weightMap.get(id);
-            if (w !== undefined) {
-              const c = theme.hex.getWeightColor(w);
-              return isDeep ? [Math.round(c[0]*0.45+70*0.55), Math.round(c[1]*0.45+70*0.55), Math.round(c[2]*0.45+70*0.55), c[3]] as [number,number,number,number] : c;
+            const state = hexDisplayMap.get(id);
+            if (!state) return theme.hex.default;
+            switch (state.kind) {
+              case 'connected':
+                return theme.hex.getWeightColor(state.weight);
+              case 'connected-dimmed': {
+                // connected but non-habitable target (downstream+habitable): flat, de-saturated
+                const c = theme.hex.getWeightColor(state.weight);
+                return [Math.round(c[0]*0.4+150*0.6), Math.round(c[1]*0.4+150*0.6), Math.round(c[2]*0.4+150*0.6), 180] as RGBA;
+              }
+              case 'excluded':
+                // upstream+habitable: non-habitable source excluded from calc, shown flat in light gray
+                return [180, 180, 180, 220] as RGBA;
+              case 'dimmed':
+                // downstream+habitable: non-habitable area, shown flat in dark gray
+                return [90, 90, 90, 200] as RGBA;
             }
-            if (isDeep) return theme.highlight.deepWater;
-            return theme.hex.default;
           },
         }),
 
@@ -294,7 +398,7 @@ function App() {
           },
           ...commonLayerProps,
           ...interactionHandlers,
-          updateTriggers: { data: [weightMap], getFillColor: [hoveredId] },
+          updateTriggers: { data: [hexDisplayMap], getFillColor: [hoveredId] },
           getElevation: catHeight,
           getFillColor: (d: any) => d.properties.id === hoveredId ? theme.hex.hovered : theme.highlight.historic,
         })] : []),
@@ -314,7 +418,7 @@ function App() {
           },
           ...commonLayerProps,
           ...interactionHandlers,
-          updateTriggers: { data: [weightMap, isHistoricHighlighted], getFillColor: [hoveredId] },
+          updateTriggers: { data: [hexDisplayMap, isHistoricHighlighted], getFillColor: [hoveredId] },
           getElevation: catHeight,
           getFillColor: (d: any) => d.properties.id === hoveredId ? theme.hex.hovered : theme.highlight.restoration,
         })] : []),
@@ -337,7 +441,7 @@ function App() {
           },
           ...commonLayerProps,
           ...interactionHandlers,
-          updateTriggers: { data: [weightMap, isHistoricHighlighted, isRestHighlighted], getFillColor: [hoveredId] },
+          updateTriggers: { data: [hexDisplayMap, isHistoricHighlighted, isRestHighlighted], getFillColor: [hoveredId] },
           getElevation: catHeight,
           getFillColor: (d: any) => d.properties.id === hoveredId ? theme.hex.hovered : theme.highlight.aquaculture,
         })] : []),
@@ -361,7 +465,7 @@ function App() {
           },
           ...commonLayerProps,
           ...interactionHandlers,
-          updateTriggers: { data: [weightMap, isHistoricHighlighted, isRestHighlighted, isAQCHighlighted], getFillColor: [hoveredId] },
+          updateTriggers: { data: [hexDisplayMap, isHistoricHighlighted, isRestHighlighted, isAQCHighlighted], getFillColor: [hoveredId] },
           getElevation: catHeight,
           getFillColor: (d: any) => d.properties.id === hoveredId ? theme.hex.hovered : theme.highlight.disease,
         })] : []),
@@ -386,7 +490,7 @@ function App() {
           },
           ...commonLayerProps,
           ...interactionHandlers,
-          updateTriggers: { data: [weightMap, clickIds, isHistoricHighlighted, isRestHighlighted, isAQCHighlighted, isDiseaseHighlighted], getFillColor: [hoveredId] },
+          updateTriggers: { data: [hexDisplayMap, clickIds, isHistoricHighlighted, isRestHighlighted, isAQCHighlighted, isDiseaseHighlighted], getFillColor: [hoveredId] },
           getElevation: catHeight,
           getFillColor: (d: any) => d.properties.id === hoveredId ? theme.hex.hovered : theme.highlight.selected,
         })] : []),
@@ -416,10 +520,10 @@ function App() {
         } as React.CSSProperties}
       >
         <ControlPanel
-          selectedDepths={selectedDepths}
-          onDepthChange={setSelectedDepths}
-          selectedTimes={selectedTimes}
-          onTimeChange={setSelectedTimes}
+          depthWeights={depthWeights}
+          onDepthWeightsChange={setDepthWeights}
+          timeWeights={timeWeights}
+          onTimeWeightsChange={setTimeWeights}
           clearHex={clearHex}
           isAQCHighlighted={isAQCHighlighted}
           onAQCChange={setAQC}
@@ -431,6 +535,8 @@ function App() {
           onHabitableChange={setHabitable}
           isHistoricHighlighted={isHistoricHighlighted}
           onHistoricChange={setHistoric}
+          direction={direction}
+          onDirectionChange={setDirection}
         />
       </div>
 

@@ -54,6 +54,19 @@ function normalize(data) {
 }
 
 
+// Parse depth_weight param into a map { depth: normalised_weight }.
+// Falls back to equal weights if absent or mismatched length.
+function parseDepthWeights(depthArr, weightStr) {
+  const rawWeights = (weightStr || '').split(',').map(Number).filter(w => !isNaN(w));
+  if (rawWeights.length !== depthArr.length) {
+    // equal weights fallback
+    const eq = 1 / (depthArr.length || 1);
+    return Object.fromEntries(depthArr.map(d => [d, eq]));
+  }
+  const total = rawWeights.reduce((s, w) => s + w, 0) || 1;
+  return Object.fromEntries(depthArr.map((d, i) => [d, rawWeights[i] / total]));
+}
+
 // most used fetch
 // takes a list of depths, time ranges, ids
 // returns a table of connectivity data, averaged over all perumations of the input
@@ -62,6 +75,8 @@ app.get('/connectivity', async (req, res) => {
   const depths = (req.query.depth || "").split(",").filter(Boolean);
   const time_ranges = (req.query.time_range || "").split(",").filter(Boolean);
   const start_ids = (req.query.start_id || '').split(',').filter(Boolean);
+  const depthWeights = parseDepthWeights(depths, req.query.depth_weight);
+  const timeWeights  = parseDepthWeights(time_ranges, req.query.time_weight);
 
   // Validate inputs
   if (!validateArray(depths, 10)) {
@@ -104,19 +119,15 @@ app.get('/connectivity', async (req, res) => {
     }
     const data = result.rows;
     
-    // Time-weighted mean: weight each row by the duration of its time window.
-    // Windows are non-overlapping (00d-07d, 07d-14d, 14d-28d), so this gives
-    // a physically meaningful average rate over the selected period.
-    // Depth rows are weighted equally (no natural physical weighting for depth).
-    const DT_H = { '00d-07d': 168, '07d-14d': 168, '14d-28d': 336 };
-    const timeWeightedMean = rows => {
-      let totalHours = 0, totalWeighted = 0;
+    // Weighted mean: each row weighted by user-supplied depth weight × time weight.
+    const weightedMean = rows => {
+      let totalW = 0, totalWeighted = 0;
       for (const r of rows) {
-        const h = DT_H[r.time_range] ?? 168;
-        totalHours += h;
-        totalWeighted += +r.weight * h;
+        const w = (depthWeights[r.depth] ?? 1) * (timeWeights[r.time_range] ?? 1);
+        totalW += w;
+        totalWeighted += +r.weight * w;
       }
-      return totalWeighted / (totalHours || 1);
+      return totalWeighted / (totalW || 1);
     };
 
     const byEndId = data.reduce((acc, r) => {
@@ -126,7 +137,7 @@ app.get('/connectivity', async (req, res) => {
 
     const aggregates = Object.entries(byEndId).map(([end_id, rows]) => ({
       end_id: typeof rows[0].end_id === 'number' ? Number(end_id) : String(end_id),
-      weight: timeWeightedMean(rows),
+      weight: weightedMean(rows),
     }));
         
     const responsePayload = normalize(aggregates);
@@ -134,6 +145,97 @@ app.get('/connectivity', async (req, res) => {
     res.json(responsePayload);
   } catch (err) {
     console.error('Error in /connectivity:', err);
+    res.status(500).json({ error: 'Database query error' });
+  }
+});
+
+// upstream connectivity: for given target hex(es), return fractional contribution of each source
+// share(s→t) = F(s→t) / Σ_{s ∈ active} F(s→t)
+// When habitable=true, sum is restricted to habitable sources only (non-habitable excluded entirely)
+app.get('/connectivity-sources', async (req, res) => {
+
+  const depths     = (req.query.depth      || '').split(',').filter(Boolean);
+  const time_ranges = (req.query.time_range || '').split(',').filter(Boolean);
+  const end_ids    = (req.query.end_id     || '').split(',').filter(Boolean);
+  const habitable  = req.query.habitable === 'true';
+  const depthWeights = parseDepthWeights(depths, req.query.depth_weight);
+  const timeWeights  = parseDepthWeights(time_ranges, req.query.time_weight);
+
+  if (!validateArray(depths, 10)) {
+    return res.status(400).json({ error: 'Invalid depth parameter. Must be array with max 10 items' });
+  }
+  if (!validateArray(time_ranges, 10)) {
+    return res.status(400).json({ error: 'Invalid time_range parameter. Must be array with max 10 items' });
+  }
+  if (!validateArray(end_ids, 10000, isValidId)) {
+    return res.status(400).json({ error: 'Invalid end_id parameter. Must be array of positive integers, max 10000 items' });
+  }
+
+  const end_ids_numbers = end_ids.map(x => Number(x));
+
+  try {
+    // Join with metadata when habitable filter is active so non-habitable sources
+    // are excluded from both the result and the denominator.
+    const queryText = habitable
+      ? `
+          SELECT c.start_id, c.depth, c.time_range, c.weight
+          FROM ${CONN_TABLE_NAME} c
+          JOIN ${META_TABLE_NAME} m ON c.start_id = m.id
+          WHERE c.end_id = ANY($1)
+            AND c.depth = ANY($2)
+            AND c.time_range = ANY($3)
+            AND m.habitable = 1;
+        `
+      : `
+          SELECT start_id, depth, time_range, weight
+          FROM ${CONN_TABLE_NAME}
+          WHERE end_id = ANY($1)
+            AND depth = ANY($2)
+            AND time_range = ANY($3);
+        `;
+
+    const result = await pool.query(queryText, [end_ids_numbers, depths, time_ranges]);
+    console.log('Request for /connectivity-sources:', { end_ids_numbers, depths, time_ranges, habitable });
+
+    if (result.rows.length === 0) {
+      return res.json([]);
+    }
+
+    const data = result.rows;
+
+    // Weighted mean per source: depth weight × time weight
+    const weightedMean = rows => {
+      let totalW = 0, totalWeighted = 0;
+      for (const r of rows) {
+        const w = (depthWeights[r.depth] ?? 1) * (timeWeights[r.time_range] ?? 1);
+        totalW += w;
+        totalWeighted += +r.weight * w;
+      }
+      return totalWeighted / (totalW || 1);
+    };
+
+    const byStartId = data.reduce((acc, r) => {
+      (acc[r.start_id] ??= []).push(r);
+      return acc;
+    }, {});
+
+    const aggregates = Object.entries(byStartId).map(([start_id, rows]) => ({
+      start_id: Number(start_id),
+      weight: weightedMean(rows),
+    }));
+
+    // Fractional shares: divide each source weight by the sum over all active sources
+    const total = aggregates.reduce((sum, a) => sum + a.weight, 0);
+    const shares = total > 0
+      ? aggregates.map(a => ({ ...a, raw_weight: a.weight / total }))
+      : aggregates.map(a => ({ ...a, raw_weight: 0 }));
+
+    // Log-normalise the fractional shares for visual encoding
+    const responsePayload = normalize(shares.map(a => ({ ...a, weight: a.raw_weight })));
+
+    res.json(responsePayload);
+  } catch (err) {
+    console.error('Error in /connectivity-sources:', err);
     res.status(500).json({ error: 'Database query error' });
   }
 });

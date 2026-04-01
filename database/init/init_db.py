@@ -78,15 +78,20 @@ try:
         logger.info(f"  Loading {pq_file.name}...")
         load_connectivity(engine, data_path=pq_file)
 
-    logger.info("Building connectivity index and running ANALYZE...")
+    logger.info("Building connectivity indices and running ANALYZE...")
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.execute(text(f'''
             CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_connect_dtr_inc
             ON "{SCHEMA}"."{CONNECTIVITY_TABLE_NAME}" (depth, time_range, start_id)
             INCLUDE (end_id, weight);
         '''))
+        conn.execute(text(f'''
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_connect_dtr_inc_reverse
+            ON "{SCHEMA}"."{CONNECTIVITY_TABLE_NAME}" (depth, time_range, end_id)
+            INCLUDE (start_id, weight);
+        '''))
         conn.execute(text(f'ANALYZE "{SCHEMA}"."{CONNECTIVITY_TABLE_NAME}";'))
-    logger.info("Connectivity data loaded with index and ANALYZE")
+    logger.info("Connectivity data loaded with indices and ANALYZE")
 
     # Mark initialization as complete
     logger.info("Creating completion marker...")

@@ -1,11 +1,16 @@
 import * as React from "react";
 import { theme } from "./theme";
+import type { ConnDirection } from "./App";
+
+// relative weight per key (0 = excluded)
+export type DepthWeights = Record<string, number>;
+export type TimeWeights  = Record<string, number>;
 
 interface ControlPanelProps {
-  selectedDepths: string[];
-  onDepthChange: (newDepths: string[]) => void;
-  selectedTimes: string[];
-  onTimeChange: (newTimes: string[]) => void;
+  depthWeights: DepthWeights;
+  onDepthWeightsChange: (w: DepthWeights) => void;
+  timeWeights: TimeWeights;
+  onTimeWeightsChange: (w: TimeWeights) => void;
   clearHex?: (payload: { depths: string[]; times: string[] }) => void;
   isAQCHighlighted: boolean;
   onAQCChange: (newAQC: boolean) => void;
@@ -17,6 +22,8 @@ interface ControlPanelProps {
   onHabitableChange: (v: boolean) => void;
   isHistoricHighlighted: boolean;
   onHistoricChange: (v: boolean) => void;
+  direction: ConnDirection;
+  onDirectionChange: (d: ConnDirection) => void;
 }
 
 const depths = [
@@ -30,15 +37,11 @@ const times = [
   { value: "14d-28d", label: "14–28 days" },
 ];
 
-// helper to toggle values in an array
-const toggle = (list: string[], value: string) =>
-  list.includes(value) ? list.filter(v => v !== value) : [...list, value];
-
 export default function ControlPanel({
-  selectedDepths,
-  onDepthChange,
-  selectedTimes,
-  onTimeChange,
+  depthWeights,
+  onDepthWeightsChange,
+  timeWeights,
+  onTimeWeightsChange,
   clearHex,
   isAQCHighlighted,
   onAQCChange,
@@ -50,15 +53,25 @@ export default function ControlPanel({
   onHabitableChange,
   isHistoricHighlighted,
   onHistoricChange,
+  direction,
+  onDirectionChange,
 }: ControlPanelProps) {
   const [collapsed, setCollapsed] = React.useState(() => window.innerWidth <= 480);
 
-  const handleDepthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onDepthChange(toggle(selectedDepths, e.target.value));
+  const depthTotal = Object.values(depthWeights).reduce((s, v) => s + v, 0);
+  const depthPct = (value: string) =>
+    depthTotal > 0 ? Math.round((depthWeights[value] ?? 0) / depthTotal * 100) : 0;
+
+  const handleDepthSlider = (value: string, raw: number) => {
+    onDepthWeightsChange({ ...depthWeights, [value]: raw });
   };
 
-  const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onTimeChange(toggle(selectedTimes, e.target.value));
+  const timeTotal = Object.values(timeWeights).reduce((s, v) => s + v, 0);
+  const timePct = (value: string) =>
+    timeTotal > 0 ? Math.round((timeWeights[value] ?? 0) / timeTotal * 100) : 0;
+
+  const handleTimeSlider = (value: string, raw: number) => {
+    onTimeWeightsChange({ ...timeWeights, [value]: raw });
   };
 
   const stopScroll = (e: React.WheelEvent | React.TouchEvent) => {
@@ -113,7 +126,7 @@ export default function ControlPanel({
         </button>
         <button
           type="button"
-          onClick={() => clearHex?.({ depths: selectedDepths, times: selectedTimes })}
+          onClick={() => clearHex?.({ depths: Object.keys(depthWeights).filter(d => depthWeights[d] > 0), times: Object.keys(timeWeights).filter(t => timeWeights[t] > 0) })}
           style={{
             background: "transparent",
             border: "none",
@@ -130,36 +143,46 @@ export default function ControlPanel({
 
       <div className="control-panel-section">
         <div className="control-panel-section-label">Drifting Depth</div>
-        <div className="control-panel-section-options">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {depths.map(({ value, label }) => (
-            <label key={value} className="control-panel-option">
+            <div key={value} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 54, flexShrink: 0 }}>{label.replace(' meters', ' m')}</span>
               <input
-                type="checkbox"
-                name="depth"
-                value={value}
-                checked={selectedDepths.includes(value)}
-                onChange={handleDepthChange}
+                type="range"
+                min={0}
+                max={10}
+                step={1}
+                value={depthWeights[value] ?? 0}
+                onChange={e => handleDepthSlider(value, Number(e.target.value))}
+                style={{ flex: 1, minWidth: 0 }}
               />
-              {label}
-            </label>
+              <span style={{ width: 32, textAlign: 'right', opacity: depthWeights[value] ? 1 : 0.35 }}>
+                {depthPct(value)}%
+              </span>
+            </div>
           ))}
         </div>
       </div>
 
       <div className="control-panel-section">
         <div className="control-panel-section-label">Time range</div>
-        <div className="control-panel-section-options">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {times.map(({ value, label }) => (
-            <label key={value} className="control-panel-option">
+            <div key={value} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 54, flexShrink: 0 }}>{label}</span>
               <input
-                type="checkbox"
-                name="time"
-                value={value}
-                checked={selectedTimes.includes(value)}
-                onChange={handleTimeChange}
+                type="range"
+                min={0}
+                max={10}
+                step={1}
+                value={timeWeights[value] ?? 0}
+                onChange={e => handleTimeSlider(value, Number(e.target.value))}
+                style={{ flex: 1, minWidth: 0 }}
               />
-              {label}
-            </label>
+              <span style={{ width: 32, textAlign: 'right', opacity: timeWeights[value] ? 1 : 0.35 }}>
+                {timePct(value)}%
+              </span>
+            </div>
           ))}
         </div>
       </div>
@@ -215,6 +238,33 @@ export default function ControlPanel({
 
     </fieldset>
 
+      {/* Direction radio buttons */}
+      <div className="control-panel-section" style={{ marginTop: 4 }}>
+        <div className="control-panel-section-label">Direction</div>
+        <div className="control-panel-section-options">
+          {([
+            { value: 'downstream', label: 'Downstream', sub: 'select source · see targets' },
+            { value: 'upstream',   label: 'Upstream',   sub: 'select target · see sources' },
+          ] as const).map(({ value, label, sub }) => (
+            <label key={value} className="control-panel-option" style={{ alignItems: 'flex-start' }}>
+              <input
+                type="radio"
+                name="direction"
+                value={value}
+                checked={direction === value}
+                onChange={() => onDirectionChange(value)}
+                style={{ marginTop: 2 }}
+              />
+              <span style={{ lineHeight: 1.3 }}>
+                <span>{label}</span>
+                <br />
+                <span style={{ opacity: 0.65 }}>{sub}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
       {/* Habitable toggle — separate from highlights */}
       <div className="control-panel-section" style={{ marginTop: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -259,7 +309,7 @@ export default function ControlPanel({
           <span style={{ opacity: 0.7 }}>high</span>
         </div>
         <div style={{ marginTop: 3, opacity: 0.75, fontWeight: 'normal' }}>
-          Relative concentration (logarithmic scale)
+          {direction === 'upstream' ? 'Source contribution (logarithmic scale)' : 'Relative concentration (logarithmic scale)'}
         </div>
       </div>
     </div>
